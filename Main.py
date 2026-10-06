@@ -184,9 +184,9 @@ for i, case in enumerate(cases):
 
     if time_elapsed[i] >= time_limit:
         print(f"{bcolors.FAIL}TIME EXCEEDED{bcolors.ENDC}", end=" ")
-    elif passed:
+    elif passed[i]:
         print(f"{bcolors.OKGREEN}PASSED{bcolors.ENDC}", end=" ")
-    elif codes[i] == 0:
+    elif codes[i] != 0:
         print(f"{bcolors.FAIL}EXIT CODE {codes[i]}{bcolors.ENDC}", end=" ")
     else:
         print(f"{bcolors.FAIL}FAILED{bcolors.ENDC}", end=" ")
@@ -213,4 +213,8 @@ for tiempo in time_elapsed:
 print(f"---- {success_count}/{len(passed)} RAN ---- {passed_count}/{len(passed)} PASSED ---- {time_conforming_count}/{len(passed)} IN TIME ----")
 
 if success_count != len(passed):
+    exit(1)
+if passed_count != len(passed):
+    exit(1)
+if time_conforming_count != len(passed):
     exit(1)
