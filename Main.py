@@ -34,12 +34,14 @@ parser.add_argument("filename", type=str, help="The name of the file to test")
 parser.add_argument("-v", "--verbose", action="store_true", help="Increase output verbosity")
 parser.add_argument("-c", "--case", type=str, help="Specify specific case to run")
 parser.add_argument("-t", "--limit", type=float, help="Time limit (in seconds) for grading.")
+parser.add_argument("-b", "--bypass", action="store_true", help="Bypass the Time Limit Exceeded (TLE) constraint.")
 
 
 args = parser.parse_args()
 verbose = args.verbose
 case_to_run = args.case
 time_limit:float = args.limit
+bypass_tle:bool = args.bypass
 
 if not time_limit:
     time_limit = 1.0
@@ -115,42 +117,53 @@ for case in cases:
 
     start_time:float = time.time()
 
-    with open(in_file, "r") as f: 
-        result_process = subprocess.run(
-            ["python", program],
-            stdin=f,
-            capture_output=True,
-            text=True,
-        )
+    try:
+        with open(in_file, "r") as f: 
+            result_process = subprocess.run(
+                ["python", program],
+                stdin=f,
+                capture_output=True,
+                text=True,
+                timeout=None if bypass_tle else time_limit
+            )
 
-    end_time:float = time.time()
+        end_time:float = time.time()
+        delta_time = end_time - start_time
+        time_elapsed.append(delta_time)
 
-    delta_time = end_time - start_time
+        result: str = result_process.stdout
+        error_result: str = result_process.stderr
 
-    time_elapsed.append(delta_time)
-
-    result: str = result_process.stdout
-    error_result: str = result_process.stderr
-
-    log(f"-----\nOutput for case {case}:\n{result}\n-----")
-    log(f"-----\nError output for case {case}:\n{error_result}\n-----")
-
-
-    result = result.strip()
-
-    log(f'Stripped output:\n{result}\n-----')
-
-    error_result = error_result.strip()
+        log(f"-----\nOutput for case {case}:\n{result}\n-----")
+        log(f"-----\nError output for case {case}:\n{error_result}\n-----")
 
 
-    results.append(result)
-    errors.append(error_result)
-    codes.append(result_process.returncode)
+        result = result.strip()
 
-    with open(out_file, "r") as f:
-        passed.append((f.read().strip() == result))
+        log(f'Stripped output:\n{result}\n-----')
+
+        error_result = error_result.strip()
 
 
+        results.append(result)
+        errors.append(error_result)
+        codes.append(result_process.returncode)
+
+        with open(out_file, "r") as f:
+            passed.append((f.read().strip() == result))
+
+    except subprocess.TimeoutExpired:
+        end_time = time.time() # type: ignore
+        delta_time = end_time - start_time
+        time_elapsed.append(delta_time)
+
+        error_result = f"Subprocess killed: Time limit of {time_limit}s exceeded."
+        log(f"-----\nError output for case {case}:\n{error_result}\n-----")
+
+        results.append("")
+        errors.append(error_result)
+        codes.append(124)  # 124 is a standard exit code for timeout
+        passed.append(False)
 
 for i, case in enumerate(cases):
     if codes[i] != 0:
@@ -177,38 +190,38 @@ for i, case in enumerate(cases):
 
 # print results
 print("\n-------------------- RESULTS ---------------------")
+
+# Find the longest case name for dynamic padding (minimum width of 10)
+max_case_len = max([len(c) for c in cases]) if cases else 10
+
 for i, case in enumerate(cases):
-    #print(f"| Case {case}: {f"{bcolors.OKGREEN}PASSED{bcolors.ENDC}" if passed[i] else ("FAILED" if (codes[i] == 0) else f"EXIT CODE {codes[i]}")} - {time_elapsed[i]:.3f}s")
+    # Print the case name, left-aligned to the max case length
+    print(f"| {case:<{max_case_len}} :", end="  ")
 
-    print(f"| Case {case}:", end="  ")
-
-    if time_elapsed[i] >= time_limit:
-        print(f"{bcolors.FAIL}TIME EXCEEDED{bcolors.ENDC}", end=" ")
+    # Determine status text and apply fixed-width padding INSIDE the color tags 
+    # to avoid ANSI escape codes messing up the string length calculation
+    if not bypass_tle and time_elapsed[i] >= time_limit:
+        print(f"{bcolors.FAIL}{'TIME EXCEEDED':<13}{bcolors.ENDC}", end=" | ")
     elif passed[i]:
-        print(f"{bcolors.OKGREEN}PASSED{bcolors.ENDC}", end=" ")
+        print(f"{bcolors.OKGREEN}{'PASSED':<13}{bcolors.ENDC}", end=" | ")
     elif codes[i] != 0:
-        print(f"{bcolors.FAIL}EXIT CODE {codes[i]}{bcolors.ENDC}", end=" ")
+        # Truncate exit code string if it's bizarrely long, but usually it's just "EXIT CODE X"
+        exit_str = f"EXIT CODE {codes[i]}"
+        print(f"{bcolors.FAIL}{exit_str:<13}{bcolors.ENDC}", end=" | ")
     else:
-        print(f"{bcolors.FAIL}FAILED{bcolors.ENDC}", end=" ")
+        print(f"{bcolors.FAIL}{'FAILED':<13}{bcolors.ENDC}", end=" | ")
 
-    print(f"- {time_elapsed[i]:.3f}s")
+    # Right-align the time for a clean decimal line-up
+    if time_elapsed[i] > time_limit:
+        print(f"{bcolors.FAIL}{time_elapsed[i]:>6.3f}s{bcolors.ENDC}")
+    elif time_elapsed[i] < (time_limit/2):
+        print(f"{time_elapsed[i]:>6.3f}s")
+    else:
+        print(f"{bcolors.WARNING}{time_elapsed[i]:>6.3f}s{bcolors.ENDC}")
 
-passed_count: int = 0
-
-for pass_bool in passed:
-    if pass_bool:
-        passed_count += 1
-
-success_count:int = 0
-for code in codes:
-    if code == 0:
-        success_count += 1
-
-time_conforming_count: int = 0
-for tiempo in time_elapsed:
-    if tiempo < time_limit:
-        time_conforming_count += 1
-
+passed_count: int = sum(1 for p in passed if p)
+success_count: int = sum(1 for c in codes if c == 0)
+time_conforming_count: int = sum(1 for t in time_elapsed if bypass_tle or t < time_limit)
 
 print(f"---- {success_count}/{len(passed)} RAN ---- {passed_count}/{len(passed)} PASSED ---- {time_conforming_count}/{len(passed)} IN TIME ----")
 

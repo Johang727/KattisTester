@@ -2,7 +2,7 @@ A simple test program for Python programs. Compares an expected output with the 
 
 
 Requirements:
-- Python (I used Python 3.14.7) but any version with subprocess, argparse, os, and time should work fine
+- Python (I used Python 3.14.7) but any version with subprocess, argparse, os, and time should work fine.
 
 In the folder where your python script is located, make sure your files are organized as such:
 
